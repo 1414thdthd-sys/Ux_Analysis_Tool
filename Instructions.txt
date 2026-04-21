@@ -1,0 +1,65 @@
+
+✅ 1. Python (mandatory)
+
+Install **Python 3.10+** (3.11 or 3.12 recommended)
+
+
+✅ 2. Required Python packages
+
+* **pandas** → CSV processing, datasets (critical)
+* **numpy** → numerical operations (dependency of pandas)
+* **matplotlib** → graphs (your scripts use graphs folder)
+
+
+✅ 3. Keep the folder UX_Analysis_Tool on desktop
+
+
+✅ 4. Download participant data from NoldusHub. (zip or rar form)
+
+
+✅ 5. Move each participant file (zip or rar) into the appropriate platform directory for example: UX_Analysis_Tool/data/aade/P4_Thodoris_sadd.zip
+
+
+✅ 6. Lanch UX_Analysis_Tool.exe file located in UX_Analysis_Tool folder. Use the full window (maximize) to access all options
+
+
+✅ 7. Run the processing pipeline
+
+       Options:
+
+	Option  A — Manual Analysis--> Perfom analysis step-by-step -->   1. Data Cleaning (Can be run per platform or for all platforms -  It runs on a separate console), 
+                                                                                                                                                             2. Platform analysis (Can be run per platform or for all platforms).
+                                                                                                                                                             3. Aggregation (merge, build or merge+ summary)
+	
+                                                            or
+
+	Option  B — Automatic Full Analysis-->  Run "Full Pipeline" (Data cleaning, Platform analysis and Aggregation)
+
+
+
+✅ 8. Output Files
+
+        After execution, outputs are generated in:
+
+       📁 Platform-level results: data/<platform>/analysis_output/
+
+	Contains: platform master dataset
+	          task summary
+	          graphs 
+
+       📁 Global results: results/
+
+        Contains: master_dataset.csv → all platforms combined
+                  task_summary.csv → aggregated per task
+                  task_rankings.csv → task selection support
+
+
+⚠️ Important Notes
+Running the pipeline overwrites previous outputs
+Always rerun the full pipeline after adding new participants
+Ensure consistent file structure and naming across participants
+
+
+
+
+
