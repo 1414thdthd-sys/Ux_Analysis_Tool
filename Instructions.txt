@@ -11,7 +11,9 @@ Install **Python 3.10+** (3.11 or 3.12 recommended)
 * **matplotlib** → graphs (your scripts use graphs folder)
 
 
-✅ 3. Keep the folder UX_Analysis_Tool on desktop
+✅ 3. Keep the folder UX_Analysis_Tool on desktop. The structure should be 
+
+UX_Analysis_Tool/ │ ├── gui_runner.py # Main GUI interface ├── UX_Analysis_Tool.exe # Executable version (Windows) │ ├── spython/ # Analysis scripts │ └── results/ # Generated outputs (ignored in repository)
 
 
 ✅ 4. Download participant data from NoldusHub. (zip or rar form)
