@@ -272,67 +272,125 @@ try:
     # =========================
     # RANKINGS / COMPOSITE METRICS
     # =========================
+    # Direction used below:
+    #   Raw composite dimensions (Hardness, CognitiveDemand, Stress, ConfusionScore)
+    #       0 = lower difficulty / lower demand
+    #       1 = higher difficulty / higher demand
+    #
+    #   OverallDifficulty
+    #       0 = easier / less demanding
+    #       1 = harder / more demanding
+    #
+    #   OverallScore
+    #       1 = easier / better usability profile
+    #       0 = harder / poorer usability profile
+    #
+    # This preserves the previous sorting logic where lower OverallScore values
+    # indicate tasks that should be prioritized for in-depth analysis.
     rank = summary.copy()
 
-    if "MeanTime" in rank.columns:
-        rank["Hardness"] = pd.to_numeric(rank["MeanTime"], errors="coerce")
-    else:
-        rank["Hardness"] = np.nan
+    def combine_available(df, columns, weights=None):
+        """Weighted row-wise mean over available normalized columns."""
+        available = [c for c in columns if c in df.columns]
+        if not available:
+            return pd.Series(np.nan, index=df.index, dtype=float)
 
-    if "MeanCognitiveLoad" in rank.columns:
-        rank["CognitiveDemand"] = pd.to_numeric(rank["MeanCognitiveLoad"], errors="coerce")
-    else:
-        rank["CognitiveDemand"] = np.nan
+        if weights is None:
+            weights = {c: 1.0 for c in available}
+        else:
+            weights = {c: weights.get(c, 1.0) for c in available}
 
-    if "MeanEDA" in rank.columns:
-        rank["Stress"] = pd.to_numeric(rank["MeanEDA"], errors="coerce")
-    elif "MeanHR" in rank.columns:
-        rank["Stress"] = pd.to_numeric(rank["MeanHR"], errors="coerce")
-    else:
-        rank["Stress"] = np.nan
+        out = []
+        for _, row in df.iterrows():
+            numerator = 0.0
+            denominator = 0.0
+            for c in available:
+                val = row.get(c, np.nan)
+                if pd.notna(val):
+                    w = weights[c]
+                    numerator += float(val) * w
+                    denominator += w
+            out.append(np.nan if denominator == 0 else numerator / denominator)
+        return pd.Series(out, index=df.index, dtype=float)
 
-    if "MeanConfusion" in rank.columns:
-        rank["ConfusionScore"] = pd.to_numeric(rank["MeanConfusion"], errors="coerce")
-    else:
-        rank["ConfusionScore"] = np.nan
+    # Difficulty-oriented normalized components.
+    # Higher values mean more difficult / demanding.
+    rank["Norm_TimeDifficulty"] = minmax(rank["MeanTime"]) if "MeanTime" in rank.columns else np.nan
+    rank["Norm_FailureDifficulty"] = (1 - minmax(rank["SuccessRate"])) if "SuccessRate" in rank.columns else np.nan
+    rank["Norm_CognitiveMean"] = minmax(rank["MeanCognitiveLoad"]) if "MeanCognitiveLoad" in rank.columns else np.nan
+    rank["Norm_CognitivePeak"] = minmax(rank["MeanCognitivePeak"]) if "MeanCognitivePeak" in rank.columns else np.nan
+    rank["Norm_EDA"] = minmax(rank["MeanEDA"]) if "MeanEDA" in rank.columns else np.nan
+    rank["Norm_HR"] = minmax(rank["MeanHR"]) if "MeanHR" in rank.columns else np.nan
+    rank["Norm_Confusion"] = minmax(rank["MeanConfusion"]) if "MeanConfusion" in rank.columns else np.nan
 
+    # Composite dimensions matching thesis terminology.
+    # Hardness combines low success and long completion time.
+    rank["Hardness"] = combine_available(
+        rank,
+        ["Norm_FailureDifficulty", "Norm_TimeDifficulty"],
+        weights={"Norm_FailureDifficulty": 0.50, "Norm_TimeDifficulty": 0.50},
+    )
+
+    # CognitiveDemand combines mean and peak cognitive load when both are available.
+    rank["CognitiveDemand"] = combine_available(
+        rank,
+        ["Norm_CognitiveMean", "Norm_CognitivePeak"],
+        weights={"Norm_CognitiveMean": 0.70, "Norm_CognitivePeak": 0.30},
+    )
+
+    # Stress combines EDA and HR when both are available.
+    rank["Stress"] = combine_available(
+        rank,
+        ["Norm_EDA", "Norm_HR"],
+        weights={"Norm_EDA": 0.50, "Norm_HR": 0.50},
+    )
+
+    # ConfusionScore is a normalized difficulty-oriented confusion indicator.
+    rank["ConfusionScore"] = rank["Norm_Confusion"] if "Norm_Confusion" in rank.columns else np.nan
+
+    # Backward-compatible usability-oriented component scores.
+    # Higher values mean better / easier.
     rank["Score_Success"] = minmax(rank["SuccessRate"]) if "SuccessRate" in rank.columns else np.nan
-    rank["Score_Time"] = 1 - minmax(rank["MeanTime"]) if "MeanTime" in rank.columns else np.nan
-    rank["Score_Cognitive"] = 1 - minmax(rank["MeanCognitiveLoad"]) if "MeanCognitiveLoad" in rank.columns else np.nan
-    rank["Score_Stress"] = 1 - minmax(rank["Stress"]) if "Stress" in rank.columns else np.nan
-    rank["Score_Confusion"] = 1 - minmax(rank["MeanConfusion"]) if "MeanConfusion" in rank.columns else np.nan
+    rank["Score_Time"] = 1 - rank["Norm_TimeDifficulty"] if "Norm_TimeDifficulty" in rank.columns else np.nan
+    rank["Score_Cognitive"] = 1 - rank["CognitiveDemand"] if "CognitiveDemand" in rank.columns else np.nan
+    rank["Score_Stress"] = 1 - rank["Stress"] if "Stress" in rank.columns else np.nan
+    rank["Score_Confusion"] = 1 - rank["ConfusionScore"] if "ConfusionScore" in rank.columns else np.nan
 
-    score_cols = [
-        "Score_Success",
-        "Score_Time",
-        "Score_Cognitive",
-        "Score_Stress",
-        "Score_Confusion",
+    # Overall difficulty is based on the same conceptual dimensions described in the thesis.
+    # Hardness receives the combined performance weight previously split across success/time.
+    difficulty_cols = [
+        "Hardness",
+        "CognitiveDemand",
+        "Stress",
+        "ConfusionScore",
     ]
 
-    available_score_cols = [c for c in score_cols if c in rank.columns]
-    weight_map = {
-        "Score_Success": 0.35,
-        "Score_Time": 0.25,
-        "Score_Cognitive": 0.15,
-        "Score_Stress": 0.15,
-        "Score_Confusion": 0.10,
+    difficulty_weights = {
+        "Hardness": 0.60,          # previous Success (0.35) + Time (0.25)
+        "CognitiveDemand": 0.15,
+        "Stress": 0.15,
+        "ConfusionScore": 0.10,
     }
 
-    def weighted_row_score(row):
+    available_difficulty_cols = [c for c in difficulty_cols if c in rank.columns]
+
+    def weighted_row_difficulty(row):
         numerator = 0.0
         denominator = 0.0
-        for c in available_score_cols:
+        for c in available_difficulty_cols:
             val = row.get(c, np.nan)
-            w = weight_map[c]
+            w = difficulty_weights[c]
             if pd.notna(val):
-                numerator += val * w
+                numerator += float(val) * w
                 denominator += w
         if denominator == 0:
             return np.nan
         return numerator / denominator
 
-    rank["OverallScore"] = rank.apply(weighted_row_score, axis=1)
+    rank["OverallDifficulty"] = rank.apply(weighted_row_difficulty, axis=1)
+    rank["OverallScore"] = 1 - rank["OverallDifficulty"]
+
+    # Lower OverallScore = higher priority / more difficult task.
     rank = rank.sort_values("OverallScore", ascending=True, na_position="last").reset_index(drop=True)
 
     ranking_file = SUMMARIES_DIR / "task_rankings.csv"
